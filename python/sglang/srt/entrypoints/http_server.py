@@ -86,6 +86,7 @@ from sglang.srt.utils import (
     kill_process_tree,
     set_uvicorn_logging_configs,
 )
+from sglang.srt.utils.opentelemetry import setup_opentelemetry
 from sglang.srt.warmup import execute_warmups
 from sglang.utils import get_exception_traceback
 from sglang.version import __version__
@@ -656,6 +657,23 @@ def launch_server(
     if server_args.enable_metrics:
         add_prometheus_middleware(app)
         enable_func_timer()
+
+    # Set up OpenTelemetry if enabled
+    if server_args.enable_opentelemetry:
+        try:
+            # Parse headers if provided as JSON string
+            headers = None
+            if server_args.opentelemetry_headers:
+                headers = json.loads(server_args.opentelemetry_headers)
+            
+            setup_opentelemetry(
+                service_name=server_args.opentelemetry_service_name,
+                otlp_endpoint=server_args.opentelemetry_endpoint,
+                otlp_headers=headers,
+            )
+            logger.info("OpenTelemetry instrumentation enabled")
+        except Exception as e:
+            logger.error(f"Failed to set up OpenTelemetry: {e}")
 
     # Send a warmup request - we will create the thread launch it
     # in the lifespan after all other warmups have fired.

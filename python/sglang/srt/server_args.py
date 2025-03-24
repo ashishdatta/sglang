@@ -64,6 +64,12 @@ class ServerArgs:
     host: str = "127.0.0.1"
     port: int = 30000
 
+    # OpenTelemetry configuration
+    enable_opentelemetry: bool = False
+    opentelemetry_service_name: str = "sglang-server"
+    opentelemetry_endpoint: Optional[str] = None
+    opentelemetry_headers: Optional[dict] = None
+
     # Memory and scheduling
     mem_fraction_static: Optional[float] = None
     max_running_requests: Optional[int] = None
@@ -362,6 +368,33 @@ class ServerArgs:
         parser.add_argument(
             "--port", type=int, default=ServerArgs.port, help="The port of the server."
         )
+
+        # OpenTelemetry args
+        parser.add_argument(
+            "--enable-opentelemetry",
+            action="store_true",
+            help="Enable OpenTelemetry instrumentation for tracing.",
+        )
+        parser.add_argument(
+            "--opentelemetry-service-name",
+            type=str,
+            default=ServerArgs.opentelemetry_service_name,
+            help="Service name for OpenTelemetry tracing.",
+        )
+        parser.add_argument(
+            "--opentelemetry-endpoint",
+            type=str,
+            default=ServerArgs.opentelemetry_endpoint,
+            help="OTLP endpoint URL for OpenTelemetry (e.g. http://localhost:4317).",
+        )
+        parser.add_argument(
+            "--opentelemetry-headers",
+            type=str,
+            default=None,
+            help="JSON string of headers for OpenTelemetry OTLP exporter.",
+        )
+
+        # Tokenizer args
         parser.add_argument(
             "--tokenizer-mode",
             type=str,
@@ -506,6 +539,7 @@ class ServerArgs:
             "name, a tag name, or a commit id. If unspecified, will use "
             "the default version.",
         )
+
         # Memory and scheduling
         parser.add_argument(
             "--mem-fraction-static",
