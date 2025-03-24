@@ -86,7 +86,7 @@ from sglang.srt.utils import (
     kill_process_tree,
     set_uvicorn_logging_configs,
 )
-from sglang.srt.utils.opentelemetry import setup_opentelemetry
+from sglang.srt.telemetry.opentelemetry import setup_opentelemetry
 from sglang.srt.warmup import execute_warmups
 from sglang.utils import get_exception_traceback
 from sglang.version import __version__
