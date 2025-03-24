@@ -26,7 +26,7 @@ import os
 import threading
 import time
 from http import HTTPStatus
-from typing import AsyncIterator, Callable, Dict, Optional
+from typing import AsyncIterator, Callable, Dict, Optional, Any
 
 # Fix a bug of Python threading
 setattr(threading, "_register_atexit", lambda *args, **kwargs: None)
@@ -86,7 +86,7 @@ from sglang.srt.utils import (
     kill_process_tree,
     set_uvicorn_logging_configs,
 )
-from sglang.srt.telemetry.opentelemetry import setup_opentelemetry
+from sglang.srt.tracing import setup_opentelemetry
 from sglang.srt.warmup import execute_warmups
 from sglang.utils import get_exception_traceback
 from sglang.version import __version__
@@ -100,6 +100,7 @@ asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 class _GlobalState:
     tokenizer_manager: TokenizerManager
     scheduler_info: Dict
+    tracer: Optional[Any] = None
 
 
 _global_state: Optional[_GlobalState] = None
@@ -137,6 +138,8 @@ app.add_middleware(
 
 HEALTH_CHECK_TIMEOUT = int(os.getenv("SGLANG_HEALTH_CHECK_TIMEOUT", 20))
 
+tracer = None
+
 
 ##### Native API endpoints #####
 
@@ -144,7 +147,8 @@ HEALTH_CHECK_TIMEOUT = int(os.getenv("SGLANG_HEALTH_CHECK_TIMEOUT", 20))
 @app.get("/health")
 async def health() -> Response:
     """Check the health of the http server."""
-    return Response(status_code=200)
+    with tracer.start_as_current_span("health"):
+        return Response(status_code=200)
 
 
 @app.get("/health_generate")
@@ -659,6 +663,7 @@ def launch_server(
         enable_func_timer()
 
     # Set up OpenTelemetry if enabled
+    global tracer
     if server_args.enable_opentelemetry:
         try:
             # Parse headers if provided as JSON string
@@ -666,7 +671,7 @@ def launch_server(
             if server_args.opentelemetry_headers:
                 headers = json.loads(server_args.opentelemetry_headers)
             
-            setup_opentelemetry(
+            tracer = setup_opentelemetry(
                 service_name=server_args.opentelemetry_service_name,
                 otlp_endpoint=server_args.opentelemetry_endpoint,
                 otlp_headers=headers,
@@ -674,6 +679,24 @@ def launch_server(
             logger.info("OpenTelemetry instrumentation enabled")
         except Exception as e:
             logger.error(f"Failed to set up OpenTelemetry: {e}")
+            tracer = None
+
+    set_global_state(
+        _GlobalState(
+            tokenizer_manager=tokenizer_manager,
+            scheduler_info=scheduler_info,
+            tracer=tracer,  # Add tracer to global state
+        )
+    )
+
+    # Add api key authorization
+    if server_args.api_key:
+        add_api_key_middleware(app, server_args.api_key)
+
+    # Add prometheus middleware
+    if server_args.enable_metrics:
+        add_prometheus_middleware(app)
+        enable_func_timer()
 
     # Send a warmup request - we will create the thread launch it
     # in the lifespan after all other warmups have fired.
